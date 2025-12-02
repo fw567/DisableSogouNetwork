@@ -40,10 +40,8 @@
    Get-ExecutionPolicy
    
    # 如果显示"Restricted"，需要临时更改策略
-    ```powershell
    Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
    
    # 确认更改（输入Y并按回车）
-    ```powershell
    .\run.ps1
    
