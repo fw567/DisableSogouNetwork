@@ -32,9 +32,7 @@
 将 `run.ps1` 文件保存到本地目录
 
 ### 第二步：准备执行环境
-1. **打开 PowerShell**：
-   - 在脚本所在目录的地址栏中输入 `powershell` 后按回车
-   - 或按住 Shift + 右键点击空白处，选择"在此处打开 PowerShell 窗口"
+1. **打开 PowerShell（Admin）**：
 
 2. **检查并设置执行策略**（如遇权限错误）：
    ```powershell
@@ -42,6 +40,10 @@
    Get-ExecutionPolicy
    
    # 如果显示"Restricted"，需要临时更改策略
+    ```powershell
    Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
    
    # 确认更改（输入Y并按回车）
+    ```powershell
+   .\run.ps1
+   
