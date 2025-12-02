@@ -5,7 +5,8 @@
 try {
     [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
     $OutputEncoding = [Console]::OutputEncoding
-} catch {}
+}
+catch {}
 
 function Find-SogouInstallation {
     # Return an array of validated SogouInput install directories
@@ -22,11 +23,12 @@ function Find-SogouInstallation {
         try {
             if (Test-Path $regPath) {
                 $prop = Get-ItemProperty -Path $regPath -ErrorAction SilentlyContinue
-                foreach ($name in @('InstallPath','Path','InstallDir')) {
+                foreach ($name in @('InstallPath', 'Path', 'InstallDir')) {
                     if ($prop.$name) { $candidatePaths += [string]$prop.$name }
                 }
             }
-        } catch {}
+        }
+        catch {}
     }
 
     # Common install locations
@@ -47,9 +49,11 @@ function Find-SogouInstallation {
             try {
                 $dir = Split-Path $p.MainModule.FileName -Parent
                 if ($dir) { $candidatePaths += $dir }
-            } catch {}
+            }
+            catch {}
         }
-    } catch {}
+    }
+    catch {}
 
     # Normalize, dedupe and strictly validate: folder name must be SogouInput
     $valid = @()
@@ -61,9 +65,10 @@ function Find-SogouInstallation {
 
             # Must contain at least one executable with name matching sogou*
             $hasExe = Get-ChildItem -Path $path -Recurse -Include *.exe -ErrorAction SilentlyContinue |
-                Where-Object { $_.Name -match '^sogou|^sg' }
+            Where-Object { $_.Name -match '^sogou|^sg' }
             if ($hasExe) { $valid += $path }
-        } catch {}
+        }
+        catch {}
     }
 
     return ($valid | Sort-Object -Unique)
@@ -78,12 +83,19 @@ function Disable-Network {
 
     $groupName = 'SogouInput Block'
 
+    # 统计本脚本使用的分组中，原来就有多少条规则（用于之后计算“新增加了多少条”）
+    $beforeRules = 0
+    try {
+        $beforeRules = (Get-NetFirewallRule -Group $groupName -ErrorAction SilentlyContinue | Measure-Object).Count
+    }
+    catch {}
+
     # Build a set of existing program paths that already have rules in this group,
     # so we only add missing ones (idempotent behavior).
     $existingPrograms = @{}
     try {
         $appFilters = Get-NetFirewallRule -Group $groupName -ErrorAction SilentlyContinue |
-            Get-NetFirewallApplicationFilter -ErrorAction SilentlyContinue
+        Get-NetFirewallApplicationFilter -ErrorAction SilentlyContinue
 
         foreach ($af in $appFilters) {
             if ($af.Program) {
@@ -91,7 +103,8 @@ function Disable-Network {
                 $existingPrograms[$key] = $true
             }
         }
-    } catch {}
+    }
+    catch {}
 
     $total = 0
     foreach ($folderName in $folderNames) {
@@ -131,17 +144,50 @@ function Disable-Network {
         $total += $count
     }
 
-    Write-Host "Successfully added $total rules in total"
+    # 统计当前分组下总共有多少条规则，并计算本次新加数量
+    $afterRules = $beforeRules
+    try {
+        $afterRules = (Get-NetFirewallRule -Group $groupName -ErrorAction SilentlyContinue | Measure-Object).Count
+    }
+    catch {}
+
+    $newRules = $afterRules - $beforeRules
+
+    Write-Host "Successfully added $total rules in total (per-folder sum)"
+    Write-Host "New firewall rules created in this run: $newRules" -ForegroundColor Green
+    Write-Host "Total firewall rules in group '$groupName' now: $afterRules" -ForegroundColor Green
 }
 
 # Main
 $paths = Find-SogouInstallation
-if (-not $paths -or $paths.Count -eq 0) {
+
+# 额外补充可能相关的目录（与旧脚本保持相近的覆盖范围）
+$extraFolders = @(
+    'C:\Windows\SysWOW64\IME\SogouPY'
+)
+
+# 强制构造成数组再追加，避免字符串被直接拼接在一起
+$allPaths = @()
+if ($paths) { $allPaths += $paths }
+
+foreach ($f in $extraFolders) {
+    try {
+        if (Test-Path $f -PathType Container) {
+            $allPaths += $f
+        }
+    }
+    catch {}
+}
+
+# 去重
+$allPaths = $allPaths | Where-Object { $_ } | Sort-Object -Unique
+
+if (-not $allPaths -or $allPaths.Count -eq 0) {
     Write-Host 'No SogouInput installation found. Please install or specify path manually.'
     exit 1
 }
 
-Write-Host 'Detected SogouInput Installation directories:'
-foreach ($p in $paths) { Write-Host " - $p" }
+Write-Host 'Detected SogouInput installation directories:'
+foreach ($p in $allPaths) { Write-Host " - $p" }
 
-Disable-Network -folderNames $paths
+Disable-Network -folderNames $allPaths
