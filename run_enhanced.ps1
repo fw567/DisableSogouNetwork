@@ -76,28 +76,55 @@ function Disable-Network {
 
     Remove-NetFirewallRule -DisplayName 'Sogou Pinyin Service' -ErrorAction Ignore
 
+    $groupName = 'SogouInput Block'
+
+    # Build a set of existing program paths that already have rules in this group,
+    # so we only add missing ones (idempotent behavior).
+    $existingPrograms = @{}
+    try {
+        $appFilters = Get-NetFirewallRule -Group $groupName -ErrorAction SilentlyContinue |
+            Get-NetFirewallApplicationFilter -ErrorAction SilentlyContinue
+
+        foreach ($af in $appFilters) {
+            if ($af.Program) {
+                $key = $af.Program.ToLower()
+                $existingPrograms[$key] = $true
+            }
+        }
+    } catch {}
+
     $total = 0
     foreach ($folderName in $folderNames) {
         $displayName = "blocked $folderName via script"
-        Remove-NetFirewallRule -DisplayName $displayName -ErrorAction Ignore
 
         Write-Host "Adding rules for: $folderName"
         $count = 0
         Get-ChildItem -Path $folderName -Recurse *.exe -ErrorAction SilentlyContinue | ForEach-Object -Process {
+            $programPath = $_.FullName
+            $programKey = $programPath.ToLower()
+
+            if ($existingPrograms.ContainsKey($programKey)) {
+                # Rule(s) for this program already exist in our group; skip creating duplicates.
+                return
+            }
+
             New-NetFirewallRule `
                 -DisplayName $displayName `
+                -Group $groupName `
                 -Direction Inbound `
-                -Program $_.FullName `
+                -Program $programPath `
                 -Action Block `
             | Out-Null
 
             New-NetFirewallRule `
                 -DisplayName $displayName `
+                -Group $groupName `
                 -Direction Outbound `
-                -Program $_.FullName `
+                -Program $programPath `
                 -Action Block `
             | Out-Null
 
+            $existingPrograms[$programKey] = $true
             $count += 2
         }
         Write-Host "Added $count rules"
@@ -114,7 +141,7 @@ if (-not $paths -or $paths.Count -eq 0) {
     exit 1
 }
 
-Write-Host 'Detected SogouInput directories:'
+Write-Host 'Detected SogouInput Installation directories:'
 foreach ($p in $paths) { Write-Host " - $p" }
 
 Disable-Network -folderNames $paths
