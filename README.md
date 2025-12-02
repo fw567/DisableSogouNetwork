@@ -19,3 +19,13 @@
 - **详细结果报告** - 完整输出操作日志与处理结果
 - **用户交互简化** - 自动化流程减少手动配置
 
+
+### !!! 若执行时发现报错，大概率是权限的问题，需要进行以下的操作：
+# 1. 查看当前执行策略
+Get-ExecutionPolicy
+
+# 2. 如果是 Restricted，需要更改
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
+
+# 3. 然后再次尝试运行
+.\run.ps1
